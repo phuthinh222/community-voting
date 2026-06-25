@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community Voting Portal · Stellar Testnet</title>
+  <script src="https://unpkg.com/@stellar/stellar-sdk@12.1.0/dist/stellar-sdk.min.js"></script>
+  <script src="contract.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d0f14;
+      --surface:  #161a24;
+      --surface2: #1e2332;
+      --border:   #2a3045;
+      --primary:  #6366f1;
+      --primary-h:#4f46e5;
+      --yes:      #10b981;
+      --no:       #ef4444;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --radius:   12px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .logo { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; font-size: 1.1rem; }
+    .logo span { font-size: 1.4rem; }
+
+    .wallet-area { display: flex; align-items: center; gap: 0.75rem; }
+    .wallet-addr {
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: var(--muted);
+      background: var(--surface2);
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      display: none;
+    }
+    .wallet-addr.visible { display: block; }
+
+    .network-badge {
+      font-size: 0.7rem;
+      background: #0f2' 27px;
+      background: rgba(16,185,129,0.15);
+      color: var(--yes);
+      border: 1px solid rgba(16,185,129,0.3);
+      padding: 0.2rem 0.5rem;
+      border-radius: 20px;
+    }
+
+    /* ── BUTTONS ── */
+    button {
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      padding: 0.55rem 1.2rem;
+      font-weight: 600;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-h); }
+
+    .btn-yes {
+      background: rgba(16,185,129,0.15);
+      color: var(--yes);
+      border: 1px solid rgba(16,185,129,0.35);
+      padding: 0.5rem 1.1rem;
+      font-weight: 600;
+    }
+    .btn-yes:hover:not(:disabled) { background: rgba(16,185,129,0.28); }
+
+    .btn-no {
+      background: rgba(239,68,68,0.12);
+      color: var(--no);
+      border: 1px solid rgba(239,68,68,0.3);
+      padding: 0.5rem 1.1rem;
+      font-weight: 600;
+    }
+    .btn-no:hover:not(:disabled) { background: rgba(239,68,68,0.24); }
+
+    .btn-ghost {
+      background: var(--surface2);
+      color: var(--muted);
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { color: var(--text); }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 760px; margin: 0 auto; padding: 2rem 1rem; }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+
+    /* ── FORM ── */
+    .field { margin-bottom: 0.9rem; }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input, textarea {
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus { border-color: var(--primary); }
+    textarea { resize: vertical; min-height: 72px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+
+    /* ── PROPOSALS ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .section-title { font-size: 1.1rem; font-weight: 700; }
+    .proposal-count { font-size: 0.8rem; color: var(--muted); }
+
+    .proposal-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      transition: border-color 0.15s;
+    }
+    .proposal-card:hover { border-color: #3a4060; }
+
+    .proposal-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .proposal-id {
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: var(--surface2);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+    }
+
+    .status-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .status-badge.active   { background: rgba(16,185,129,0.15); color: var(--yes); border: 1px solid rgba(16,185,129,0.3); }
+    .status-badge.closed   { background: rgba(100,116,139,0.15); color: var(--muted); border: 1px solid var(--border); }
+    .status-badge.expired  { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+
+    .proposal-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.4rem; }
+    .proposal-desc  { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.5; }
+
+    .proposal-meta {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.9rem;
+      flex-wrap: wrap;
+    }
+
+    /* Vote bar */
+    .vote-bar {
+      height: 6px;
+      background: rgba(239,68,68,0.25);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+    .bar-yes {
+      height: 100%;
+      background: var(--yes);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+      min-width: 0;
+    }
+
+    .vote-counts {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      margin-bottom: 0.9rem;
+    }
+    .yes-count { color: var(--yes); font-weight: 600; }
+    .no-count  { color: var(--no);  font-weight: 600; }
+    .result-label { font-weight: 700; font-size: 0.85rem; }
+
+    .vote-actions { display: flex; gap: 0.6rem; }
+
+    .voted-badge {
+      font-size: 0.8rem;
+      color: var(--yes);
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.25);
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .voted-badge.muted { color: var(--muted); background: transparent; border-color: var(--border); }
+
+    /* ── STATUS BAR ── */
+    .status-bar {
+      position: fixed;
+      bottom: 1.25rem;
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 280px;
+      max-width: 600px;
+      width: calc(100% - 2rem);
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      display: none;
+      z-index: 100;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .status-bar.success { background: #065f46; border: 1px solid #10b981; }
+    .status-bar.error   { background: #7f1d1d; border: 1px solid #ef4444; }
+    .status-bar.loading { background: #1e1b4b; border: 1px solid var(--primary); }
+    .status-bar.info    { background: var(--surface2); border: 1px solid var(--border); }
+    .status-bar a { color: #93c5fd; }
+
+    .empty { color: var(--muted); text-align: center; padding: 2rem; font-size: 0.9rem; }
+
+    /* Spinner */
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span>🗳️</span> Community Voting Portal
+  </div>
+  <div class="wallet-area">
+    <span class="network-badge">● Testnet</span>
+    <span class="wallet-addr" id="walletAddr"></span>
+    <button class="btn-primary" id="connectBtn">Connect Wallet</button>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Create Proposal -->
+  <div class="card">
+    <div class="card-title">✏️ Create Proposal</div>
+    <form id="createForm">
+      <div class="field">
+        <label>Title</label>
+        <input id="newTitle" type="text" placeholder="e.g. Build a community garden" required maxlength="80">
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea id="newDesc" placeholder="Describe the proposal in detail..." required maxlength="300"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Voting duration (days)</label>
+          <input id="newDays" type="number" value="30" min="1" max="365">
+        </div>
+        <div class="field" style="display:flex; align-items:flex-end;">
+          <button type="submit" class="btn-primary" id="createBtn" style="width:100%">Create Proposal</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Proposals List -->
+  <div class="section-header">
+    <span class="section-title">📋 Proposals</span>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <span class="proposal-count" id="proposalCount"></span>
+      <button class="btn-ghost" id="refreshBtn" style="padding:0.4rem 0.8rem;font-size:0.8rem;">↻ Refresh</button>
+    </div>
+  </div>
+  <div id="proposalsList">
+    <p class="empty">Loading proposals...</p>
+  </div>
+
+</main>
+
+<div class="status-bar" id="statusBar"></div>
+
+<script>
+'use strict';
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const CONTRACT_ID  = 'CCDICCSVB7HS55Z32F4JTMAHCAMDLYKZAMLUT3Z4BQPMBMN2XM3T4S6A';
+const RPC_URL      = 'https://soroban-testnet.stellar.org';
+const PASSPHRASE   = 'Test SDF Network ; September 2015';
+const EXPLORER     = 'https://stellar.expert/explorer/testnet';
+// Fallback read-only address (the deployed admin) — lets us load proposals before wallet connect
+const FALLBACK_KEY = 'GDGQZXYCNQBQRQQHKHYGBDGA4KIBXSTPDJMI5H64LFBBU4ZGQCWW7QG6';
+
+// ── SDK shortcuts ────────────────────────────────────────────────────────────
+const {
+  SorobanRpc, Contract, TransactionBuilder, BASE_FEE,
+  Address, nativeToScVal, scValToNative, TransactionBuilder: TB,
+} = StellarSdk;
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let walletAddress = null;
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+// ── STELLAR HELPERS ──────────────────────────────────────────────────────────
+function server()   { return new SorobanRpc.Server(RPC_URL); }
+function contract() { return new Contract(CONTRACT_ID); }
+
+async function readContract(funcName, ...args) {
+  const srv = server();
+  const src = walletAddress || FALLBACK_KEY;
+  const acct = await srv.getAccount(src);
+  const tx = new TransactionBuilder(acct, { fee: BASE_FEE, networkPassphrase: PASSPHRASE })
+    .addOperation(contract().call(funcName, ...args))
+    .setTimeout(30)
+    .build();
+  const sim = await srv.simulateTransaction(tx);
+  if (SorobanRpc.Api.isSimulationError(sim)) throw new Error(sim.error);
+  return scValToNative(sim.result.retval);
+}
+
+async function writeContract(funcName, ...args) {
+  if (!walletAddress) throw new Error('Connect wallet first');
+  if (!window.freighter) throw new Error('Freighter not installed');
+  const srv = server();
+  const acct = await srv.getAccount(walletAddress);
+  const tx = new TransactionBuilder(acct, { fee: BASE_FEE, networkPassphrase: PASSPHRASE })
+    .addOperation(contract().call(funcName, ...args))
+    .setTimeout(30)
+    .build();
+  const prepared = await srv.prepareTransaction(tx);
+  if (SorobanRpc.Api.isSimulationError(prepared)) throw new Error(prepared.error);
+
+  const { signedTxXdr } = await window.freighter.signTransaction(prepared.toXDR(), {
+    networkPassphrase: PASSPHRASE,
+  });
+  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, PASSPHRASE);
+  const resp = await srv.sendTransaction(signedTx);
+  if (resp.status === 'ERROR') throw new Error(resp.errorResult?.toString() || 'TX error');
+
+  // Poll until confirmed
+  for (let i = 0; i < 24; i++) {
+    await sleep(1500);
+    const txr = await srv.getTransaction(resp.hash);
+    if (txr.status === 'SUCCESS') return { hash: resp.hash };
+    if (txr.status === 'FAILED')  throw new Error('Transaction failed on-chain');
+  }
+  throw new Error('Transaction timeout');
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── WALLET ───────────────────────────────────────────────────────────────────
+async function connectWallet() {
+  if (!window.freighter) {
+    setStatus('⚠️ Freighter not installed — get it at freighter.app', 'error');
+    return;
+  }
+  try {
+    if (window.freighter.setAllowed) await window.freighter.setAllowed();
+    const res = await window.freighter.getAddress();
+    walletAddress = res.address || res;
+    updateWalletUI();
+    await loadProposals();
+  } catch (e) {
+    setStatus('Failed to connect: ' + e.message, 'error');
+  }
+}
+
+function updateWalletUI() {
+  const btn  = $('connectBtn');
+  const addr = $('walletAddr');
+  if (walletAddress) {
+    btn.textContent = 'Connected ✓';
+    btn.disabled = true;
+    addr.textContent = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4);
+    addr.classList.add('visible');
+  }
+}
+
+// ── LOAD PROPOSALS ───────────────────────────────────────────────────────────
+async function loadProposals() {
+  $('proposalsList').innerHTML = '<p class="empty"><span class="spinner"></span>Loading...</p>';
+  try {
+    const count = Number(await readContract('proposal_count'));
+    $('proposalCount').textContent = count + ' proposal' + (count !== 1 ? 's' : '');
+
+    const items = [];
+    for (let i = 1; i <= count; i++) {
+      try {
+        const p = await readContract('get_proposal', nativeToScVal(BigInt(i), { type: 'u64' }));
+        if (walletAddress) {
+          p.hasVoted = await readContract(
+            'has_voted',
+            nativeToScVal(BigInt(i), { type: 'u64' }),
+            new Address(walletAddress).toScVal(),
+          );
+        }
+        items.push(p);
+      } catch { /* skip bad proposals */ }
+    }
+    renderProposals(items);
+  } catch (e) {
+    $('proposalsList').innerHTML = '<p class="empty" style="color:#f87171">Failed to load: ' + esc(e.message) + '</p>';
+  }
+}
+
+// ── CREATE PROPOSAL ──────────────────────────────────────────────────────────
+$('createForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!walletAddress) { setStatus('Connect wallet first', 'error'); return; }
+
+  const title = $('newTitle').value.trim();
+  const desc  = $('newDesc').value.trim();
+  const days  = Math.max(1, parseInt($('newDays').value) || 30);
+
+  if (!title || !desc) { setStatus('Fill in title and description', 'error'); return; }
+
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + days * 86400);
+
+  $('createBtn').disabled = true;
+  setStatus('<span class="spinner"></span>Creating proposal — confirm in Freighter…', 'loading');
+  try {
+    const { hash } = await writeContract(
+      'create_proposal',
+      new Address(walletAddress).toScVal(),
+      nativeToScVal(title, { type: 'string' }),
+      nativeToScVal(desc,  { type: 'string' }),
+      nativeToScVal(deadline, { type: 'u64' }),
+    );
+    setStatus('✅ Proposal created!', 'success', hash);
+    $('createForm').reset();
+    await loadProposals();
+  } catch (err) {
+    setStatus('❌ ' + err.message, 'error');
+  } finally {
+    $('createBtn').disabled = false;
+  }
+});
+
+// ── VOTE ─────────────────────────────────────────────────────────────────────
+window.handleVote = async (proposalId, voteYes) => {
+  if (!walletAddress) { setStatus('Connect wallet first', 'error'); return; }
+  setStatus(`<span class="spinner"></span>Voting ${voteYes ? 'YES' : 'NO'} — confirm in Freighter…`, 'loading');
+  try {
+    const { hash } = await writeContract(
+      'vote',
+      new Address(walletAddress).toScVal(),
+      nativeToScVal(BigInt(proposalId), { type: 'u64' }),
+      nativeToScVal(voteYes, { type: 'bool' }),
+    );
+    setStatus('✅ Vote recorded!', 'success', hash);
+    await loadProposals();
+  } catch (err) {
+    setStatus('❌ ' + err.message, 'error');
+  }
+};
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function renderProposals(proposals) {
+  if (!proposals.length) {
+    $('proposalsList').innerHTML = '<p class="empty">No proposals yet — create the first one! 👆</p>';
+    return;
+  }
+
+  $('proposalsList').innerHTML = proposals.map(p => {
+    const yes   = Number(p.yes_count);
+    const no    = Number(p.no_count);
+    const total = yes + no;
+    const yesPercent = total > 0 ? Math.round(yes / total * 100) : 0;
+    const expired = Number(p.deadline) * 1000 < Date.now();
+    const canVote = p.active && !expired && !p.hasVoted && walletAddress;
+
+    const statusLabel = !p.active ? 'Closed' : expired ? 'Expired' : 'Active';
+    const statusClass = !p.active ? 'closed' : expired ? 'expired' : 'active';
+
+    const resultText = yes > no ? '✅ PASSED' : no > yes ? '❌ REJECTED' : total > 0 ? '⚖️ TIED' : '';
+
+    return `
+      <div class="proposal-card">
+        <div class="proposal-header">
+          <span class="proposal-id">#${p.id}</span>
+          <span class="status-badge ${statusClass}">${statusLabel}</span>
+        </div>
+        <h3 class="proposal-title">${esc(String(p.title))}</h3>
+        <p class="proposal-desc">${esc(String(p.description))}</p>
+        <div class="proposal-meta">
+          <span>📅 Created: ${fmtDate(p.created_at)}</span>
+          <span>⏰ ${expired ? 'Ended' : 'Deadline'}: ${fmtDate(p.deadline)}</span>
+        </div>
+        <div class="vote-bar">
+          <div class="bar-yes" style="width:${yesPercent}%"></div>
+        </div>
+        <div class="vote-counts">
+          <span class="yes-count">👍 YES: ${yes}</span>
+          <span class="result-label">${resultText}</span>
+          <span class="no-count">NO: ${no} 👎</span>
+        </div>
+        ${
+          p.hasVoted
+            ? '<div class="voted-badge">✓ You already voted</div>'
+            : canVote
+              ? `<div class="vote-actions">
+                   <button class="btn-yes" onclick="handleVote(${p.id}, true)">👍 Vote YES</button>
+                   <button class="btn-no"  onclick="handleVote(${p.id}, false)">👎 Vote NO</button>
+                 </div>`
+              : `<div class="voted-badge muted">${!walletAddress ? 'Connect wallet to vote' : 'Voting not available'}</div>`
+        }
+      </div>`;
+  }).join('');
+}
+
+// ── UTILS ────────────────────────────────────────────────────────────────────
+function fmtDate(ts) {
+  if (!ts && ts !== 0n) return '—';
+  return new Date(Number(ts) * 1000).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+  });
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let statusTimer;
+function setStatus(msg, type = 'info', hash = null) {
+  const bar = $('statusBar');
+  const link = hash ? ` &nbsp;·&nbsp; <a href="${EXPLORER}/tx/${hash}" target="_blank" rel="noopener">View TX ↗</a>` : '';
+  bar.className = 'status-bar ' + type;
+  bar.innerHTML = msg + link;
+  bar.style.display = 'block';
+  clearTimeout(statusTimer);
+  if (type === 'success' || type === 'error') {
+    statusTimer = setTimeout(() => { bar.style.display = 'none'; }, 8000);
+  }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+$('connectBtn').addEventListener('click', connectWallet);
+$('refreshBtn').addEventListener('click', loadProposals);
+
+// Load proposals on page open (read-only, no wallet needed)
+loadProposals().catch(console.error);
+</script>
+</body>
+</html>
